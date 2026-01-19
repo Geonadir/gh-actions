@@ -35,10 +35,6 @@ inputs:
     required: false
     default: .
 
-  DOMAIN:
-    description: Pass Domain for environment selection
-    required: true
-
 outputs:
   IMAGE_URI:
     description: Full pushed image URI with tag
@@ -108,7 +104,6 @@ runs:
         ${{ steps.meta.outputs.image_uri }}
         ${{ steps.meta.outputs.registry }}/${{ inputs.ECR_REPOSITORY }}:buildcache
       build-args: |
-        DOMAIN=${{ inputs.DOMAIN }}
         BUILDKIT_INLINE_CACHE=1
       cache-from: |
         type=registry,ref=${{ steps.meta.outputs.registry }}/${{ inputs.ECR_REPOSITORY }}:buildcache
