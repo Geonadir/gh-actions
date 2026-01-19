@@ -1,0 +1,116 @@
+name: Build & Push Docker image to ECR
+description: Builds a Docker image and pushes to AWS ECR.
+
+inputs:
+  AWS_REGION:
+    description: "AWS Region"
+    required: true
+  AWS_ROLE_ARN:
+    required: true
+    description: "IAM Role ARN to assume via GitHub OIDC"
+
+  ECR_REPOSITORY:
+    description: ECR repository name
+    required: true
+  IMAGE_TAG:
+    description: Image tag to push in ECR
+    default: "latest"
+    required: false
+
+  PIP_MODULES_FILE:
+    required: false
+    default: requirements.txt
+    description: "Path to the pip modules requirements file"
+  APT_MODULES_FILE:
+    required: false
+    default: apt_requirements.txt
+    description: "Path to the apt dependencies requirements file"
+
+  DOCKERFILE_PATH:
+    description: Path of the Dockerfile
+    required: false
+    default: Dockerfile
+  BUILD_CONTEXT:
+    description: Docker Build context
+    required: false
+    default: .
+
+  DOMAIN:
+    description: Pass Domain for environment selection
+    required: true
+
+outputs:
+  IMAGE_URI:
+    description: Full pushed image URI with tag
+    value: ${{ steps.meta.outputs.image_uri }}
+  REGISTRY:
+    description: ECR registry
+    value: ${{ steps.meta.outputs.registry }}
+  IMAGE_DIGEST:
+    description: Digest of the pushed image
+    value: ${{ steps.build.outputs.digest }}
+
+runs:
+  using: composite
+  steps:
+  - name: Copy Dependency Files - Skip if not present
+    shell: bash
+    run: |
+      if [[ -n "${{ inputs.APT_MODULES_FILE }}" && -f "${{ inputs.APT_MODULES_FILE }}" ]]; then
+        cp "${{ inputs.APT_MODULES_FILE }}" apt_requirements.txt
+      else
+        echo "APT requirements not provided or file not found. Skipping."
+      fi
+      if [[ -n "${{ inputs.PIP_MODULES_FILE }}" && -f "${{ inputs.PIP_MODULES_FILE }}" ]]; then
+        cp "${{ inputs.PIP_MODULES_FILE }}" requirements.txt
+      else
+        echo "PIP requirements not provided or file not found. Skipping."
+      fi
+
+  - name: Configure AWS Credentials (OIDC)
+    uses: aws-actions/configure-aws-credentials@v5
+    with:
+      role-to-assume: ${{ inputs.AWS_ROLE_ARN }}
+      aws-region: ${{ inputs.AWS_REGION }}
+
+  - name: Login to Amazon ECR
+    id: ecr
+    uses: aws-actions/amazon-ecr-login@v2
+
+  - name: Set up Docker Buildx
+    uses: docker/setup-buildx-action@v3
+    with:
+      driver-opts: |
+        image=moby/buildkit:latest
+
+  - name: Compute image refs
+    id: meta
+    shell: bash
+    run: |
+      set -euo pipefail
+      REGISTRY="${{ steps.ecr.outputs.registry }}"
+      REPO="${{ inputs.ECR_REPOSITORY }}"
+      TAG="${{ inputs.IMAGE_TAG }}"
+      IMAGE_URI="${REGISTRY}/${REPO}:${TAG}"
+      echo "registry=$REGISTRY" >> "$GITHUB_OUTPUT"
+      echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+  - name: Build and push image
+    uses: docker/build-push-action@v6
+    with:
+      context: ${{ inputs.BUILD_CONTEXT }}
+      file: ${{ inputs.DOCKERFILE_PATH }}
+      platforms: linux/amd64
+      push: true
+      provenance: false
+      sbom: false
+      tags: |
+        ${{ steps.meta.outputs.image_uri }}
+        ${{ steps.meta.outputs.registry }}/${{ inputs.ECR_REPOSITORY }}:buildcache
+      build-args: |
+        DOMAIN=${{ inputs.DOMAIN }}
+        BUILDKIT_INLINE_CACHE=1
+      cache-from: |
+        type=registry,ref=${{ steps.meta.outputs.registry }}/${{ inputs.ECR_REPOSITORY }}:buildcache
+      cache-to: |
+        type=registry,ref=${{ steps.meta.outputs.registry }}/${{ inputs.ECR_REPOSITORY }}:buildcache,mode=max
