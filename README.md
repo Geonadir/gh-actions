@@ -4,14 +4,14 @@ A tiny toolbox of GitHub composite actions.
 
 ## What’s inside
 
-- **`.github/actions/ecr-build-push-action`**  
+- **`.github/actions/ecr-build-push-action`**
   Build a Docker image and push it to **AWS ECR**.
   Docs: see the action’s own `README.md`.
 
 ## Usage
 
 ```yaml
-- uses: zite-io/gh-actions/.github/actions/action-name@v1.0.0
+- uses: Geonadir/gh-actions/.github/actions/action-name@v1.0.0
   with:
     AWS_REGION: ap-south-1
     AWS_ROLE_ARN: arn:aws:iam::123456789012:role/GitHubOidcEcrPushRole
