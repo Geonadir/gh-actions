@@ -1,0 +1,59 @@
+name: Deploy Docker Image to AWS Lambda
+description: Updates an AWS Lambda function with a new container image from ECR.
+
+inputs:
+  AWS_REGION:
+    description: "AWS Region"
+    required: true
+
+  AWS_ROLE_ARN:
+    description: "IAM Role ARN to assume via GitHub OIDC"
+    required: true
+
+  ECR_REGISTRY:
+    description: "ECR registry"
+    required: true
+
+  ECR_REPOSITORY:
+    description: "ECR repository name"
+    required: true
+
+  IMAGE_TAG:
+    description: "Image tag to deploy"
+    required: true
+
+  LAMBDA_FUNCTION_NAME:
+    description: "Lambda function name"
+    required: true
+
+outputs:
+  IMAGE_URI:
+    description: "Image URI deployed to Lambda"
+    value: ${{ steps.meta.outputs.image_uri }}
+
+runs:
+  using: composite
+  steps:
+  - name: Configure AWS Credentials (OIDC)
+    uses: aws-actions/configure-aws-credentials@v5
+    with:
+      role-to-assume: ${{ inputs.AWS_ROLE_ARN }}
+      aws-region: ${{ inputs.AWS_REGION }}
+
+  - name: Compute image URI
+    id: meta
+    shell: bash
+    run: |
+      set -euo pipefail
+      IMAGE_URI="${{ inputs.ECR_REGISTRY }}/${{ inputs.ECR_REPOSITORY }}:${{ inputs.IMAGE_TAG }}"
+      echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+  - name: Update AWS Lambda function
+    shell: bash
+    run: |
+      echo "Updating Lambda function '${{ inputs.LAMBDA_FUNCTION_NAME }}'"
+      echo "Using image '${{ steps.meta.outputs.image_uri }}'"
+
+      aws lambda update-function-code \
+        --function-name "${{ inputs.LAMBDA_FUNCTION_NAME }}" \
+        --image-uri "${{ steps.meta.outputs.image_uri }}"
