@@ -1,0 +1,68 @@
+name: Deploy to ECS (Force New Deployment)
+description: Forces a new deployment on an existing ECS service.
+
+inputs:
+  AWS_REGION:
+    description: AWS region
+    required: true
+
+  AWS_ROLE_ARN:
+    description: IAM Role ARN to assume via GitHub OIDC
+    required: true
+
+  ECS_CLUSTER:
+    description: ECS cluster name (or ARN)
+    required: true
+
+  ECS_SERVICE:
+    description: ECS service name (or ARN)
+    required: true
+
+  WAIT_FOR_STABILITY:
+    description: "Wait until the service becomes stable (true/false)"
+    required: false
+    default: "true"
+
+outputs:
+  SERVICE_ARN:
+    description: ECS Service ARN
+    value: ${{ steps.deploy.outputs.service_arn }}
+
+runs:
+  using: composite
+  steps:
+  - name: Configure AWS Credentials
+    uses: aws-actions/configure-aws-credentials@v5
+    with:
+      role-to-assume: ${{ inputs.AWS_ROLE_ARN }}
+      aws-region: ${{ inputs.AWS_REGION }}
+
+  - name: Force new deployment
+    id: deploy
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      echo "Forcing new deployment for service '${{ inputs.ECS_SERVICE }}' in cluster '${{ inputs.ECS_CLUSTER }}'..."
+
+      SERVICE_ARN="$(
+        aws ecs update-service \
+          --cluster "${{ inputs.ECS_CLUSTER }}" \
+          --service "${{ inputs.ECS_SERVICE }}" \
+          --force-new-deployment \
+          --query "service.serviceArn" \
+          --output text
+      )"
+
+      echo "service_arn=$SERVICE_ARN" >> "$GITHUB_OUTPUT"
+      echo "Service ARN: $SERVICE_ARN"
+
+      if [[ "${{ inputs.WAIT_FOR_STABILITY }}" == "true" ]]; then
+        echo "Waiting for service to become stable..."
+        aws ecs wait services-stable \
+          --cluster "${{ inputs.ECS_CLUSTER }}" \
+          --services "${{ inputs.ECS_SERVICE }}"
+        echo "Service is stable ✅"
+      else
+        echo "Skipping stability wait (WAIT_FOR_STABILITY=${{ inputs.WAIT_FOR_STABILITY }})"
+      fi
