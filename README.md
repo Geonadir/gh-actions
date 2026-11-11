@@ -39,7 +39,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build & Push to ECR
         id: build
@@ -72,7 +72,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build & Push to ECR
         uses: Geonadir/gh-actions/.github/actions/ecr-build-push-action@v1.0.0
